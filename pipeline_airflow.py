@@ -129,18 +129,19 @@ class NorthwindETL:
         """Cria view combinando pedidos e detalhes"""
         engine = create_engine(self.postgres_conn_string)
         query = """
-        CREATE OR REPLACE VIEW orders_complete AS
+        CREATE OR REPLACE VIEW public.orders_complete AS
         SELECT 
             o.*,
             d.product_id,
             d.unit_price,
             d.quantity,
             d.discount
-        FROM orders_final o
-        JOIN order_details_final d ON o.order_id = d.order_id;
+        FROM public.orders_final o
+        JOIN public.order_details_final d ON o.order_id = d.order_id;
         """
         with engine.connect() as conn:
             conn.execute(text(query))
+            conn.commit()
             
     def export_results(self):
         """Exporta resultados da consulta final"""
