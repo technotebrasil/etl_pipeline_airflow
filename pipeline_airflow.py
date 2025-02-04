@@ -98,19 +98,28 @@ class NorthwindETL:
             postgres_path = Path(f"data/postgres")
             for table_path in postgres_path.glob("*"):
                 table_name = table_path.name
+                table_name_final = table_name.replace('_final', '') + '_final'
                 file_path = table_path / self.execution_date / f"{table_name}.parquet"
                 
                 if file_path.exists():
                     df = pd.read_parquet(file_path)
-                    df.to_sql(f"{table_name}_final", engine, if_exists='replace', index=False)
+                    df.to_sql(table_name_final, engine, if_exists='replace', index=False)
             
             # Carregar dados do CSV
             csv_file = Path(f"data/csv/{self.execution_date}/order_details.parquet")
             if csv_file.exists():
                 df = pd.read_parquet(csv_file)
                 df.to_sql('order_details_final', engine, if_exists='replace', index=False)
-                
-            self.create_combined_view()
+            
+            # Verificar se as tabelas existem antes de criar a view
+            with engine.connect() as conn:
+                tables = pd.read_sql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", conn)
+                if 'orders_final' in tables['table_name'].values and 'order_details_final' in tables['table_name'].values:
+                    self.create_combined_view()
+                    self.logger.info("View orders_complete criada com sucesso")
+                else:
+                    self.logger.error("Tabelas necessárias não encontradas")
+                    return False
             return True
             
         except Exception as e:
@@ -121,25 +130,38 @@ class NorthwindETL:
         """Cria view combinando pedidos e detalhes"""
         engine = create_engine(self.postgres_conn_string)
         query = """
-        CREATE OR REPLACE VIEW orders_complete AS
-        SELECT o.*, d.*
-        FROM orders_final o
-        JOIN order_details_final d ON o.order_id = d.order_id;
+        CREATE OR REPLACE VIEW public.orders_complete AS
+        SELECT 
+            o.*,
+            d.product_id,
+            d.unit_price,
+            d.quantity,
+            d.discount
+        FROM public.orders_final o
+        JOIN public.order_details_final d ON o.order_id = d.order_id;
         """
         with engine.connect() as conn:
             conn.execute(text(query))
+            conn.commit()
             
     def export_results(self):
         """Exporta resultados da consulta final"""
-        engine = create_engine(self.postgres_conn_string)
-        query = "SELECT * FROM orders_complete"
-        
-        results_dir = Path("results")
-        results_dir.mkdir(exist_ok=True)
-        
-        df = pd.read_sql(query, engine)
-        df.to_csv(f"results/orders_complete_{self.execution_date}.csv", index=False)
-        df.to_json(f"results/orders_complete_{self.execution_date}.json", orient='records')
+        try:
+            engine = create_engine(self.postgres_conn_string)
+            
+            # Recriar a view para garantir que existe
+            self.create_combined_view()
+            
+            query = "SELECT * FROM orders_complete"
+            results_dir = Path("results")
+            results_dir.mkdir(exist_ok=True)
+            
+            df = pd.read_sql(query, engine)
+            df.to_csv(f"results/orders_complete_{self.execution_date}.csv", index=False)
+            df.to_json(f"results/orders_complete_{self.execution_date}.json", orient='records')
+            self.logger.info("Resultados exportados com sucesso")
+        except Exception as e:
+            self.logger.error(f"Erro ao exportar resultados: {str(e)}")
 
 def main():
     parser = argparse.ArgumentParser(description='Northwind ETL Pipeline')
