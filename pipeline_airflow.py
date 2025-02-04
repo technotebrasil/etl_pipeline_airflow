@@ -144,15 +144,22 @@ class NorthwindETL:
             
     def export_results(self):
         """Exporta resultados da consulta final"""
-        engine = create_engine(self.postgres_conn_string)
-        query = "SELECT * FROM orders_complete"
-        
-        results_dir = Path("results")
-        results_dir.mkdir(exist_ok=True)
-        
-        df = pd.read_sql(query, engine)
-        df.to_csv(f"results/orders_complete_{self.execution_date}.csv", index=False)
-        df.to_json(f"results/orders_complete_{self.execution_date}.json", orient='records')
+        try:
+            engine = create_engine(self.postgres_conn_string)
+            
+            # Recriar a view para garantir que existe
+            self.create_combined_view()
+            
+            query = "SELECT * FROM orders_complete"
+            results_dir = Path("results")
+            results_dir.mkdir(exist_ok=True)
+            
+            df = pd.read_sql(query, engine)
+            df.to_csv(f"results/orders_complete_{self.execution_date}.csv", index=False)
+            df.to_json(f"results/orders_complete_{self.execution_date}.json", orient='records')
+            self.logger.info("Resultados exportados com sucesso")
+        except Exception as e:
+            self.logger.error(f"Erro ao exportar resultados: {str(e)}")
 
 def main():
     parser = argparse.ArgumentParser(description='Northwind ETL Pipeline')
