@@ -109,8 +109,16 @@ class NorthwindETL:
             if csv_file.exists():
                 df = pd.read_parquet(csv_file)
                 df.to_sql('order_details_final', engine, if_exists='replace', index=False)
-                
-            self.create_combined_view()
+            
+            # Verificar se as tabelas existem antes de criar a view
+            with engine.connect() as conn:
+                tables = pd.read_sql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", conn)
+                if 'orders_final' in tables['table_name'].values and 'order_details_final' in tables['table_name'].values:
+                    self.create_combined_view()
+                    self.logger.info("View orders_complete criada com sucesso")
+                else:
+                    self.logger.error("Tabelas necessárias não encontradas")
+                    return False
             return True
             
         except Exception as e:
@@ -122,7 +130,12 @@ class NorthwindETL:
         engine = create_engine(self.postgres_conn_string)
         query = """
         CREATE OR REPLACE VIEW orders_complete AS
-        SELECT o.*, d.*
+        SELECT 
+            o.*,
+            d.product_id,
+            d.unit_price,
+            d.quantity,
+            d.discount
         FROM orders_final o
         JOIN order_details_final d ON o.order_id = d.order_id;
         """
