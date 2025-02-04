@@ -98,11 +98,12 @@ class NorthwindETL:
             postgres_path = Path(f"data/postgres")
             for table_path in postgres_path.glob("*"):
                 table_name = table_path.name
+                table_name_final = table_name.replace('_final', '') + '_final'
                 file_path = table_path / self.execution_date / f"{table_name}.parquet"
                 
                 if file_path.exists():
                     df = pd.read_parquet(file_path)
-                    df.to_sql(f"{table_name}_final", engine, if_exists='replace', index=False)
+                    df.to_sql(table_name_final, engine, if_exists='replace', index=False)
             
             # Carregar dados do CSV
             csv_file = Path(f"data/csv/{self.execution_date}/order_details.parquet")

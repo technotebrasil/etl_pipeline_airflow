@@ -6,7 +6,7 @@ import sys
 
 # Adicionar caminho do pipeline ao PYTHONPATH
 sys.path.append(str(Path(__file__).parent.parent))
-from pipeline import NorthwindETL
+from pipeline_airflow import NorthwindETL
 
 default_args = {
     'owner': 'airflow',
